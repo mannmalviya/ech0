@@ -3,10 +3,10 @@ import { StyleSheet } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 
-export default function RecordScreen() {
+export default function LibraryScreen() {
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="subtitle">Record</ThemedText>
+      <ThemedText>No recordings yet.</ThemedText>
     </ThemedView>
   );
 }
