@@ -28,6 +28,10 @@ export const MODELS: ModelInfo[] = [
 ];
 
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+/** Longest audio the gpt-* models accept in one request. */
+export const MAX_REQUEST_SECONDS = 1500;
+/** Long audio is cut into parts of this length (20 minutes), under the 25-minute limit. */
+export const PART_SECONDS = 1200;
 
 export function getModel(id: ModelId): ModelInfo {
   return MODELS.find((m) => m.id === id)!;
@@ -44,10 +48,29 @@ export function formatUsd(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
 
-/** Why a model cannot transcribe this audio, or null if it can. */
-export function modelProblem(id: ModelId, durationSec: number, sizeBytes: number): string | null {
-  if (sizeBytes > MAX_UPLOAD_BYTES) return 'File is larger than 25 MB';
+/** True if the audio is too long or too big for one request, so it must be cut into parts. */
+export function needsParts(durationSec: number, sizeBytes: number): boolean {
+  return durationSec > MAX_REQUEST_SECONDS || sizeBytes > MAX_UPLOAD_BYTES;
+}
+
+/** Length in seconds of each part. Audio that fits one request is one part. */
+export function partLengths(durationSec: number, sizeBytes: number): number[] {
+  if (!needsParts(durationSec, sizeBytes)) return [durationSec];
+  const lengths: number[] = [];
+  for (let start = 0; start < durationSec; start += PART_SECONDS) {
+    lengths.push(Math.min(PART_SECONDS, durationSec - start));
+  }
+  return lengths;
+}
+
+/**
+ * Why a model cannot transcribe this audio, or null if it can.
+ * `canSplit` is true in ech0's own build, which cuts long audio into parts. Expo Go cannot.
+ */
+export function modelProblem(id: ModelId, durationSec: number, sizeBytes: number, canSplit: boolean): string | null {
+  if (canSplit) return null;
+  if (sizeBytes > MAX_UPLOAD_BYTES) return 'Over 25 MB. Needs the own build';
   const { maxSeconds } = getModel(id);
-  if (maxSeconds !== null && durationSec > maxSeconds) return 'Longer than 25 min. Use whisper-1';
+  if (maxSeconds !== null && durationSec > maxSeconds) return 'Over 25 min. Use whisper-1';
   return null;
 }

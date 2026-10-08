@@ -5,7 +5,8 @@ import { Alert, StyleSheet } from 'react-native';
 import { ThemedText } from '@/components/themed-text';
 import { Button, Chip, Row } from '@/components/ui';
 import { useLibrary } from '@/lib/library';
-import { estimateCost, formatUsd, getModel, modelProblem, MODELS, type ModelId } from '@/lib/models';
+import { canSplitAudio } from '../../modules/audio-splitter';
+import { estimateCost, formatUsd, getModel, modelProblem, MODELS, partLengths, type ModelId } from '@/lib/models';
 import type { Recording } from '@/lib/storage';
 import { LANGUAGES } from '@/lib/transcript';
 
@@ -13,7 +14,8 @@ export function TranscribePanel({ recording }: { recording: Recording }) {
   const { settings, updateSettings, transcribe } = useLibrary();
   const { models: selected, language } = settings;
 
-  const problemOf = (id: ModelId) => modelProblem(id, recording.durationSec, recording.sizeBytes);
+  const problemOf = (id: ModelId) => modelProblem(id, recording.durationSec, recording.sizeBytes, canSplitAudio);
+  const partCount = partLengths(recording.durationSec, recording.sizeBytes).length;
   const isRunning = (id: ModelId) => recording.transcripts[id]?.status === 'running';
   const usable = selected.filter((id) => !problemOf(id) && !isRunning(id));
 
@@ -59,6 +61,12 @@ export function TranscribePanel({ recording }: { recording: Recording }) {
       <ThemedText type="small" themeColor="textSecondary" style={styles.note}>
         The diarize model always uses Auto language.
       </ThemedText>
+      {partCount > 1 && canSplitAudio ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          Long audio: ech0 sends it in {partCount} parts of 20 min. With diarize, speaker letters start again in
+          each part, so &quot;A (part 1)&quot; and &quot;A (part 2)&quot; can be different people.
+        </ThemedText>
+      ) : null}
       <ThemedText style={styles.estimate}>{estimate}</ThemedText>
       <Button
         title={`Transcribe with ${usable.length} model${usable.length === 1 ? '' : 's'}`}

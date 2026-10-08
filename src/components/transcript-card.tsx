@@ -25,6 +25,13 @@ const TIMING_NOTE = {
   words: 'Highlights words while playing. Tap a word to jump.',
 };
 
+function progress(t: Transcript): string {
+  const parts = t.parts ?? [];
+  if (parts.length <= 1) return 'Transcribing…';
+  const done = parts.filter((p) => p.status === 'done').length;
+  return `Transcribing… ${done} of ${parts.length} parts done`;
+}
+
 export function TranscriptCard({ recording, transcript, time, onSeek, onRetry }: Props) {
   const theme = useTheme();
   const [copied, setCopied] = useState(false);
@@ -53,7 +60,7 @@ export function TranscriptCard({ recording, transcript, time, onSeek, onRetry }:
         {transcript.model}
       </ThemedText>
 
-      {transcript.status === 'running' && <ThemedText themeColor="textSecondary">Transcribing…</ThemedText>}
+      {transcript.status === 'running' && <ThemedText themeColor="textSecondary">{progress(transcript)}</ThemedText>}
 
       {transcript.status === 'failed' && (
         <>

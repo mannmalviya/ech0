@@ -17,7 +17,7 @@ import { formatTime } from '@/lib/transcript';
 export default function RecordingScreen() {
   const theme = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { recordings, rename, remove, transcribe } = useLibrary();
+  const { recordings, rename, remove, retry } = useLibrary();
   const recording = recordings.find((r) => r.id === id);
 
   const player = useAudioPlayer(recording ? audioFile(recording).uri : null, { updateInterval: 100 });
@@ -127,7 +127,7 @@ export default function RecordingScreen() {
               transcript={t}
               time={time}
               onSeek={seek}
-              onRetry={() => transcribe(recording.id, [t.model], t.language)}
+              onRetry={() => retry(recording.id, t.model)}
             />
           ))
         )}

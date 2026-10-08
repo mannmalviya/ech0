@@ -6,6 +6,7 @@
 //   .ech0/library.json             names, lengths, and transcripts with their times
 //   .ech0/settings.json            last models, language, and total spent
 //   .ech0/unsaved/<time>.m4a       recordings that do not have a name yet
+//   .ech0/parts/<id>/part-0.m4a    20-minute parts of long audio, for transcription
 
 import { Directory, File, Paths } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
@@ -67,6 +68,19 @@ export const saveSettings = (settings: Settings) => writeJson(settingsFile, sett
 export const audioFile = (r: Pick<Recording, 'name' | 'ext'>) => new File(Paths.document, r.name + r.ext);
 export const transcriptFile = (recordingName: string, model: ModelId) =>
   new File(Paths.document, transcriptFileName(recordingName, model));
+
+export const partsFolder = (recordingId: string) => new Directory(appDir, 'parts', recordingId);
+
+/** URIs of the parts made earlier for this recording, in order. */
+export function listParts(recordingId: string): string[] {
+  const dir = partsFolder(recordingId);
+  if (!dir.exists) return [];
+  return dir
+    .list()
+    .filter((item): item is File => item instanceof File && /^part-\d+\.m4a$/.test(item.name))
+    .sort((a, b) => Number(a.name.match(/\d+/)![0]) - Number(b.name.match(/\d+/)![0]))
+    .map((f) => f.uri);
+}
 
 /** Names already used in the ech0 folder, without extensions. */
 export function takenNames(): string[] {

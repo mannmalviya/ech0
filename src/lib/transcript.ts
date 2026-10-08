@@ -17,13 +17,44 @@ export type Turn = { start: number; end: number; text: string; speaker?: string 
 
 export type TranscriptResult = { text: string; words?: Word[]; turns?: Turn[] };
 
+/** One part of long audio. Finished parts are kept, so Retry sends only the failed ones. */
+export type PartState = { status: 'running' | 'done' | 'failed'; result?: TranscriptResult; error?: string };
+
 export type Transcript = TranscriptResult & {
   model: ModelId;
   language: Language;
   createdAt: string;
   status: 'running' | 'done' | 'failed';
   error?: string;
+  /** Only while running or after a failure, for audio cut into parts. */
+  parts?: PartState[];
 };
+
+/**
+ * Joins the results of the parts of long audio into one result. Times move by the part's start.
+ * The diarize model labels speakers again in each part, so "A" in part 1 and part 2 can be different
+ * people. To show this, speakers get the part number, for example "A (part 2)".
+ */
+export function mergeParts(results: TranscriptResult[], partSeconds: number): TranscriptResult {
+  if (results.length === 1) return results[0];
+  const merged: TranscriptResult = { text: results.map((r) => r.text.trim()).join('\n\n') };
+  if (results.some((r) => r.words)) {
+    merged.words = results.flatMap((r, i) =>
+      (r.words ?? []).map((w) => ({ ...w, start: w.start + i * partSeconds, end: w.end + i * partSeconds }))
+    );
+  }
+  if (results.some((r) => r.turns)) {
+    merged.turns = results.flatMap((r, i) =>
+      (r.turns ?? []).map((t) => ({
+        ...t,
+        start: t.start + i * partSeconds,
+        end: t.end + i * partSeconds,
+        ...(t.speaker ? { speaker: `${t.speaker} (part ${i + 1})` } : {}),
+      }))
+    );
+  }
+  return merged;
+}
 
 /** "4:05", or "1:02:09" for an hour or more. */
 export function formatTime(seconds: number): string {

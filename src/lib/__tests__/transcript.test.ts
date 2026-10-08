@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { activeIndex, formatTime, toTxt } from '../transcript';
+import { activeIndex, formatTime, mergeParts, toTxt } from '../transcript';
 
 describe('formatTime', () => {
   it('shows minutes and seconds', () => {
@@ -60,5 +60,41 @@ describe('activeIndex', () => {
 
   it('is -1 for an empty list', () => {
     expect(activeIndex([], 3)).toBe(-1);
+  });
+});
+
+describe('mergeParts', () => {
+  it('returns a single part as it is', () => {
+    const one = { text: 'Hi.', words: [{ word: 'Hi', start: 1, end: 2 }] };
+    expect(mergeParts([one], 1200)).toBe(one);
+  });
+
+  it('moves word times by each part start, and joins text', () => {
+    const merged = mergeParts(
+      [
+        { text: 'One.', words: [{ word: 'One', start: 1, end: 2 }] },
+        { text: ' Two.', words: [{ word: 'Two', start: 3, end: 4 }] },
+      ],
+      1200
+    );
+    expect(merged.text).toBe('One.\n\nTwo.');
+    expect(merged.words).toEqual([
+      { word: 'One', start: 1, end: 2 },
+      { word: 'Two', start: 1203, end: 1204 },
+    ]);
+  });
+
+  it('adds the part number to diarize speakers', () => {
+    const merged = mergeParts(
+      [
+        { text: 'Hi.', turns: [{ speaker: 'A', start: 0, end: 1, text: 'Hi.' }] },
+        { text: 'Yes.', turns: [{ speaker: 'A', start: 5, end: 6, text: 'Yes.' }] },
+      ],
+      1200
+    );
+    expect(merged.turns).toEqual([
+      { speaker: 'A (part 1)', start: 0, end: 1, text: 'Hi.' },
+      { speaker: 'A (part 2)', start: 1205, end: 1206, text: 'Yes.' },
+    ]);
   });
 });

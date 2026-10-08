@@ -6,8 +6,9 @@ import { File, Paths } from 'expo-file-system';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 
+import { splitAudio } from '../../modules/audio-splitter';
 import { readDuration } from './audio';
-import { estimateCost, type ModelId } from './models';
+import { estimateCost, needsParts, partLengths, PART_SECONDS, type ModelId } from './models';
 import { askForName } from './name-prompt';
 import { cleanName, defaultName, transcriptFileName, uniqueName } from './names';
 import { transcribeFile } from './openai';
@@ -15,10 +16,12 @@ import {
   audioFile,
   ensureFolders,
   getApiKey,
+  listParts,
   listUnsaved,
   loadLibrary,
   loadSettings,
   moveToUnsaved,
+  partsFolder,
   saveLibrary,
   saveSettings,
   takenNames,
@@ -26,7 +29,7 @@ import {
   type Recording,
   type Settings,
 } from './storage';
-import { formatTime, toTxt, type Language, type Transcript } from './transcript';
+import { formatTime, mergeParts, toTxt, type Language, type PartState, type Transcript } from './transcript';
 
 type LibraryValue = {
   recordings: Recording[];
@@ -39,7 +42,11 @@ type LibraryValue = {
   rename: (id: string, newName: string) => void;
   remove: (id: string) => void;
   transcribe: (id: string, models: ModelId[], language: Language) => void;
+  /** Runs a failed transcript again. For long audio, only the failed parts are sent. */
+  retry: (id: string, model: ModelId) => void;
 };
+
+const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 const LibraryContext = createContext<LibraryValue | null>(null);
 
@@ -58,7 +65,8 @@ function loadRecordings(): Recording[] {
     const transcripts = { ...r.transcripts };
     for (const t of Object.values(transcripts)) {
       if (t.status === 'running') {
-        transcripts[t.model] = { ...t, status: 'failed', error: 'Stopped before it finished. Tap Retry.' };
+        const parts = t.parts?.map((p): PartState => (p.status === 'running' ? { status: 'failed' } : p));
+        transcripts[t.model] = { ...t, parts, status: 'failed', error: 'Stopped before it finished. Tap Retry.' };
       }
     }
     return { ...r, transcripts };
@@ -174,52 +182,112 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
     if (!r) return;
     const files = [audioFile(r), ...Object.keys(r.transcripts).map((m) => transcriptFile(r.name, m as ModelId))];
     for (const f of files) if (f.exists) f.delete();
+    const parts = partsFolder(id);
+    if (parts.exists) parts.delete();
     setRecordings((list) => list.filter((x) => x.id !== id));
   }, []);
 
-  const transcribe = useCallback(
-    async (id: string, models: ModelId[], language: Language) => {
-      const r = latest.current.find((x) => x.id === id);
-      if (!r) return;
+  // Several models can ask for the parts at the same time; they share one cutting job.
+  const cutting = useRef(new Map<string, Promise<string[]>>());
+
+  /** The audio to send: the whole file, or its 20-minute parts for long audio. */
+  const audioParts = useCallback((r: Recording): Promise<string[]> => {
+    if (!needsParts(r.durationSec, r.sizeBytes)) return Promise.resolve([audioFile(r).uri]);
+    const existing = listParts(r.id);
+    if (existing.length === partLengths(r.durationSec, r.sizeBytes).length) return Promise.resolve(existing);
+    let job = cutting.current.get(r.id);
+    if (!job) {
+      job = splitAudio(audioFile(r).uri, partsFolder(r.id).uri, PART_SECONDS);
+      job.finally(() => cutting.current.delete(r.id)).catch(() => {});
+      cutting.current.set(r.id, job);
+    }
+    return job;
+  }, []);
+
+  /** Transcribes one recording with one model. `earlier` keeps finished parts from a failed run. */
+  const runModel = useCallback(
+    async (r: Recording, model: ModelId, language: Language, earlier?: PartState[]) => {
       const createdAt = new Date().toISOString();
-      const setTranscript = (model: ModelId, t: Transcript) =>
-        updateRecording(id, (x) => ({ ...x, transcripts: { ...x.transcripts, [model]: t } }));
+      const put = (fields: Pick<Transcript, 'status'> & Partial<Transcript>) =>
+        updateRecording(r.id, (x) => ({
+          ...x,
+          transcripts: { ...x.transcripts, [model]: { model, language, createdAt, text: '', ...fields } },
+        }));
+      let parts: PartState[] = earlier ?? [];
+      put({ status: 'running', parts });
 
-      for (const model of models) {
-        setTranscript(model, { model, language, createdAt, status: 'running', text: '' });
-      }
-      const apiKey = await getApiKey();
+      try {
+        const apiKey = await getApiKey();
+        if (!apiKey) throw new Error('No API key. Add it in Settings.');
+        const uris = await audioParts(r);
+        const lengths = uris.length === 1 ? [r.durationSec] : partLengths(r.durationSec, r.sizeBytes);
+        const keep = earlier?.length === uris.length;
+        parts = uris.map((_, i) => (keep && earlier![i].status === 'done' ? earlier![i] : { status: 'running' }));
+        put({ status: 'running', parts });
 
-      // All selected models run at the same time.
-      await Promise.all(
-        models.map(async (model) => {
+        // Parts go one after another; the selected models run at the same time.
+        for (let i = 0; i < uris.length; i++) {
+          if (parts[i].status === 'done') continue;
           try {
-            if (!apiKey) throw new Error('No API key. Add it in Settings.');
-            const result = await transcribeFile(audioFile(r).uri, model, language, apiKey);
-            setSettings((s) => ({ ...s, totalSpentUsd: s.totalSpentUsd + estimateCost(r.durationSec, [model]) }));
-            const done: Transcript = { ...result, model, language, createdAt, status: 'done' };
-            // Use the newest name: the recording may have been renamed or deleted during the upload.
-            const current = latest.current.find((x) => x.id === id);
-            if (!current) return;
-            const txt = transcriptFile(current.name, model);
-            if (!txt.exists) txt.create();
-            txt.write(toTxt(current.name, done));
-            setTranscript(model, done);
+            const result = await transcribeFile(uris[i], model, language, apiKey);
+            parts = parts.map((p, j) => (j === i ? { status: 'done', result } : p));
+            const cost = estimateCost(lengths[i] ?? 0, [model]);
+            setSettings((s) => ({ ...s, totalSpentUsd: s.totalSpentUsd + cost }));
           } catch (e) {
-            const error = e instanceof Error ? e.message : String(e);
-            setTranscript(model, { model, language, createdAt, status: 'failed', text: '', error });
+            parts = parts.map((p, j) => (j === i ? { status: 'failed', error: errorText(e) } : p));
           }
-        })
-      );
+          put({ status: 'running', parts });
+        }
+
+        const failed = parts.filter((p) => p.status !== 'done');
+        if (failed.length > 0) {
+          throw new Error(
+            uris.length === 1 ? failed[0].error : `${failed.length} of ${uris.length} parts failed: ${failed[0].error}`
+          );
+        }
+        const done: Transcript = {
+          ...mergeParts(parts.map((p) => p.result!), PART_SECONDS),
+          model,
+          language,
+          createdAt,
+          status: 'done',
+        };
+        // Use the newest name: the recording may have been renamed or deleted during the upload.
+        const current = latest.current.find((x) => x.id === r.id);
+        if (!current) return;
+        const txt = transcriptFile(current.name, model);
+        if (!txt.exists) txt.create();
+        txt.write(toTxt(current.name, done));
+        put(done);
+      } catch (e) {
+        put({ status: 'failed', error: errorText(e), parts });
+      }
     },
-    [updateRecording]
+    [updateRecording, audioParts]
+  );
+
+  const transcribe = useCallback(
+    (id: string, models: ModelId[], language: Language) => {
+      const r = latest.current.find((x) => x.id === id);
+      if (r) for (const model of models) runModel(r, model, language);
+    },
+    [runModel]
+  );
+
+  const retry = useCallback(
+    (id: string, model: ModelId) => {
+      const r = latest.current.find((x) => x.id === id);
+      const t = r?.transcripts[model];
+      if (r && t) runModel(r, model, t.language, t.parts);
+    },
+    [runModel]
   );
 
   const updateSettings = useCallback((patch: Partial<Settings>) => setSettings((s) => ({ ...s, ...patch })), []);
 
   return (
     <LibraryContext.Provider
-      value={{ recordings, settings, updateSettings, addRecording, importAudio, rename, remove, transcribe }}>
+      value={{ recordings, settings, updateSettings, addRecording, importAudio, rename, remove, transcribe, retry }}>
       {children}
     </LibraryContext.Provider>
   );
