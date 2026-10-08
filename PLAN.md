@@ -9,11 +9,12 @@ ech0 is a simple iPhone app. It records talks at events and conferences, and it 
 
 1. **Record:** big button, timer, sound level bar.
    - The app records `.m4a` at 128 kbps mono, in the default mic mode.
-   - After Stop, a name box opens with 3 buttons: **Save**, **Use date & time**, **Delete**.
+   - After Stop, a name box opens with 3 buttons: **Save**, **Use date & time**, **Delete** (asks "Are you sure?").
+   - In Expo Go, the screen stays on while recording, because Expo Go stops recording when the screen locks.
    - If the app closes before you choose, ech0 asks again the next time you open it.
    - If a phone call stops the recording, the app keeps the audio and opens the name box.
 2. **Library:** the newest recordings are first. You can rename, delete (with "Are you sure?"), and **Import audio** (mp3, m4a, wav, and more, copied into ech0).
-   - **Recording page:** player, transcribe panel, transcript cards.
+   - **Recording page:** player, **Share audio** (for "Save to Files" in Expo Go), rename, delete, transcribe panel, transcript cards.
    - **Transcribe panel:**
      - Model buttons with multi-select. They start with your last choice.
      - Language: **Auto**, English, or Hindi.
@@ -30,7 +31,7 @@ ech0 is a simple iPhone app. It records talks at events and conferences, and it 
 ## Models and prices (October 2026)
 
 | Model | Price per minute | Times for highlight |
-|---|---|---|
+| --- | --- | --- |
 | `gpt-transcribe` | $0.0045 | none |
 | `gpt-4o-transcribe` | $0.006 | none |
 | `gpt-4o-mini-transcribe` | $0.003 | none |
