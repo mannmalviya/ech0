@@ -130,7 +130,8 @@ export function LibraryProvider({ children }: { children: ReactNode }) {
   }, [addFile]);
 
   useEffect(() => {
-    setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
+    // allowsBackgroundRecording: keep recording when the screen locks (works in ech0's own build, not Expo Go).
+    setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true, allowsBackgroundRecording: true });
     // Recordings left without a name the last time the app closed.
     nameUnsaved();
   }, [nameUnsaved]);

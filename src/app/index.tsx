@@ -5,7 +5,9 @@ import {
   useAudioRecorderState,
   type RecordingOptions,
 } from 'expo-audio';
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +28,9 @@ const RECORDING_OPTIONS: RecordingOptions = {
 };
 
 const KEEP_AWAKE_TAG = 'ech0-record';
+// In Expo Go, recording stops when the screen locks, so there the screen stays on while recording.
+// ech0's own build keeps recording with the screen locked.
+const IN_EXPO_GO = Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 export default function RecordScreen() {
   const theme = useTheme();
@@ -36,27 +41,38 @@ export default function RecordScreen() {
   const [startedAt, setStartedAt] = useState<Date | null>(null);
   const [permission, setPermission] = useState<boolean | null>(null);
   const sawRecording = useRef(false);
+  // Set by the ech0://record link (Action Button or Back Tap shortcut). A new value means "start now".
+  const { autostart } = useLocalSearchParams<{ autostart?: string }>();
+  const handledAutostart = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     requestRecordingPermissionsAsync().then((result) => setPermission(result.granted));
   }, []);
 
-  const start = async () => {
+  const start = useCallback(async () => {
     await recorder.prepareToRecordAsync();
     recorder.record();
     sawRecording.current = false;
     setStartedAt(new Date());
-    // In Expo Go, recording stops when the screen locks, so keep the screen on.
-    activateKeepAwakeAsync(KEEP_AWAKE_TAG);
-  };
+    if (IN_EXPO_GO) activateKeepAwakeAsync(KEEP_AWAKE_TAG);
+  }, [recorder]);
 
   const stop = useCallback(async () => {
     if (!startedAt) return;
     setStartedAt(null);
-    deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
+    if (IN_EXPO_GO) deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
     await recorder.stop();
     if (recorder.uri) await addRecording(recorder.uri, startedAt);
   }, [startedAt, recorder, addRecording]);
+
+  // The shortcut only starts a recording. It never stops one, so a second press cannot end a talk by mistake.
+  useEffect(() => {
+    if (!autostart || autostart === handledAutostart.current || permission !== true) return;
+    handledAutostart.current = autostart;
+    // start() changes state only after an await, so this does not cause an extra render pass.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!startedAt) start();
+  }, [autostart, permission, startedAt, start]);
 
   // A phone call pauses the recorder. Keep what was recorded and open the name box.
   useEffect(() => {
