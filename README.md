@@ -18,6 +18,36 @@ See [PLAN.md](PLAN.md) for what it does and why, and [TODO.md](TODO.md) for late
 4. Scan the QR code with the iPhone camera.
 5. In ech0, open **Settings** and paste your OpenAI API key.
 
+## Your own build (works for 7 days)
+
+Your own build can do 3 things that Expo Go cannot: record with the screen locked, show the ech0 folder in the Files app, and transcribe audio longer than 25 minutes.
+
+### 1. Build the app on GitHub
+
+1. Open <https://github.com/mannmalviya/ech0/actions/workflows/ios-build.yml>.
+2. Click **Run workflow** → **Run workflow**. Or run `gh workflow run ios-build.yml -R mannmalviya/ech0` as the mannmalviya account.
+3. Wait about 20 minutes. Open the finished run and download **ech0-ipa** at the bottom. Unzip it to get `ech0.ipa`.
+
+### 2. Prepare the iPhone (one time)
+
+1. Settings → Privacy & Security → **Developer Mode** → On. The iPhone restarts.
+2. Connect the iPhone to this computer with a USB cable, and tap **Trust**.
+
+### 3. Install
+
+See "Install tool" below. After you install it, open Settings → General → **VPN & Device Management**, tap your Apple ID, and tap **Trust**.
+
+**Every 7 days**, install the same way again. Install over the old app, and do not delete it first: then your recordings and API key stay.
+
+### 4. Action Button or Back Tap shortcut
+
+1. Open the **Shortcuts** app → **+** → **Add Action** → **Open URLs**.
+2. Type `ech0://record`. Name the shortcut "Record with ech0".
+3. **Action Button:** Settings → Action Button → Shortcut → "Record with ech0".
+4. **Back Tap:** Settings → Accessibility → Touch → Back Tap → Double Tap → "Record with ech0".
+
+The shortcut opens ech0 and starts recording. It never stops a recording, so a second press cannot end a talk by mistake.
+
 ## The parts
 
 The stack is **Expo + React Native + TypeScript**. React Native makes real iPhone screens from TypeScript code. Expo gives ready-made parts for audio, files, and more.
@@ -37,6 +67,9 @@ The stack is **Expo + React Native + TypeScript**. React Native makes real iPhon
 | `src/lib/openai.ts`, `openai-format.ts` | What ech0 sends to OpenAI, and how it reads the answer. |
 | `src/lib/transcript.ts` | The `.txt` format and the highlight math. |
 | `src/lib/names.ts` | File names: date-time names, safe characters, "(2)" for taken names. |
+| `src/app/+native-intent.tsx` | Turns the `ech0://record` link into "start recording". |
+| `modules/audio-splitter/` | Native Swift code that cuts long audio into 20-minute parts. Only in the own build. |
+| `.github/workflows/ios-build.yml` | The GitHub build that makes `ech0.ipa`. |
 
 Files in `src/app/` are screens. The file path is the screen's address.
 
@@ -47,6 +80,7 @@ Files in `src/app/` are screens. The file path is the screen's address.
 - `.ech0/library.json`: names, lengths, and transcripts with their times.
 - `.ech0/settings.json`: last models, language, and total spent.
 - `.ech0/unsaved/`: recordings that do not have a name yet.
+- `.ech0/parts/`: 20-minute parts of long audio, made when you transcribe.
 
 The API key is not in a file. It is in the iPhone Keychain.
 

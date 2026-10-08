@@ -61,7 +61,9 @@ Audio longer than 25 minutes shows a warning in Expo Go and suggests `whisper-1`
 - Recording with the screen locked.
 - The ech0 folder shows in the Files app under **On My iPhone › ech0**.
 - Long audio is cut into parts only when you transcribe, with native code.
-- A public GitHub repo builds the app on a free GitHub Mac. A free Apple ID installs it for 7 days. We choose the install tool (xtool or SideStore) at that time.
+- A public GitHub repo builds the app on a free GitHub Mac. A free Apple ID installs it for 7 days.
+- A shortcut link, `ech0://record`, opens ech0 and starts recording. You can put it on the Action Button or Back Tap. It never stops a recording.
+- Long audio is cut into 20-minute parts. Retry sends only the failed parts. With diarize, speaker letters start again in each part ("A (part 2)").
 
 ## Decisions and why
 
