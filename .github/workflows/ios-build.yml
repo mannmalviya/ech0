@@ -1,0 +1,51 @@
+# Builds ech0 on a free GitHub Mac and gives an unsigned ech0.ipa.
+# A sideload tool then signs it with a free Apple ID and installs it (it works for 7 days).
+# Start it on GitHub: Actions → "Build iOS app" → Run workflow. Or: gh workflow run ios-build.yml
+
+name: Build iOS app
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install packages
+        run: npm ci
+
+      - name: Make the native iOS project
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Build the app without signing
+        run: |
+          xcodebuild \
+            -workspace ios/ech0.xcworkspace \
+            -scheme ech0 \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            -quiet \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package ech0.ipa
+        run: |
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/ech0.app Payload/
+          zip -qry ech0.ipa Payload
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ech0-ipa
+          path: ech0.ipa
+          retention-days: 30
