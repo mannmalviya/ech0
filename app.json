@@ -8,7 +8,7 @@
     "scheme": "ech0",
     "userInterfaceStyle": "automatic",
     "ios": {
-      "icon": "./assets/expo.icon",
+      "icon": "./assets/ech0.icon",
       "bundleIdentifier": "com.mannmalviya.ech0",
       "infoPlist": {
         "UIFileSharingEnabled": true,
@@ -33,9 +33,9 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#208AEF",
+          "backgroundColor": "#4D40E6",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "imageWidth": 110
         }
       ],
       [
