@@ -30,12 +30,18 @@ Your own build can do 3 things that Expo Go cannot: record with the screen locke
 
 ### 2. Prepare the iPhone (one time)
 
-1. Settings → Privacy & Security → **Developer Mode** → On. The iPhone restarts.
-2. Connect the iPhone to this computer with a USB cable, and tap **Trust**.
+Connect the iPhone to this computer with a USB cable, and tap **Trust** on the iPhone.
 
-### 3. Install
+### 3. Install with Impactor
 
-See "Install tool" below. After you install it, open Settings → General → **VPN & Device Management**, tap your Apple ID, and tap **Trust**.
+1. Download `Impactor-linux-x86_64.appimage` from <https://github.com/khcrysalis/Impactor/releases>, and make it runnable: `chmod +x Impactor-linux-x86_64.appimage`.
+2. Connect the iPhone with the cable first. Then start Impactor: `./Impactor-linux-x86_64.appimage`. (If Impactor does not see the phone, unplug it, plug it in again, and restart Impactor.)
+3. Sign in with your Apple ID in Impactor.
+4. Choose `ech0.ipa` and install it.
+5. On the iPhone: Settings → General → **VPN & Device Management** → tap your Apple ID → **Trust**.
+6. Tap the ech0 icon. iOS says "Developer Mode Required". Now go to Settings → Privacy & Security → **Developer Mode** (near the bottom) → On. The iPhone restarts. After the restart, tap **Turn On**.
+
+Developer Mode is hidden until an app like this is on the phone. That is normal.
 
 **Every 7 days**, install the same way again. Install over the old app, and do not delete it first: then your recordings and API key stay.
 
